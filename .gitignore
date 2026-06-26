@@ -169,7 +169,7 @@ ehthumbs.db
 data/
 
 # Model Weights (YOLO model weights are usually very large, e.g., best.pt, last.pt, yolov8n.pt)
-*.pt
+# *.pt  # Cho phép push model weights
 *.pth
 *.onnx
 *.engine
@@ -178,6 +178,6 @@ data/
 *.weights
 
 # YOLO training runs / logs / output results
-runs/
+# runs/  # Cho phép push kết quả training
 wandb/
 mlflow/

@@ -31,7 +31,11 @@ plt.rcParams['figure.dpi'] = 100
 sns.set_style('whitegrid')
 sns.set_palette('husl')
 
-PROJECT_ROOT = Path(r'd:\Research\Yolo_Pothole_detection\Pothole_Detection')
+import os
+# Tự động xác định PROJECT_ROOT
+PROJECT_ROOT = Path(os.getcwd())
+if PROJECT_ROOT.name == 'notebooks':
+    PROJECT_ROOT = PROJECT_ROOT.parent
 RAW_DATA_DIR = PROJECT_ROOT / 'data' / 'raw'
 
 # Đường dẫn dataset
