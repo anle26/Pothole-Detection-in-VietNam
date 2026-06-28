@@ -1,0 +1,16 @@
+# YoloV8 Core
+ultralytics>=8.0.0
+
+# Data Visualization and Exploration
+fiftyone
+matplotlib
+seaborn
+
+# Image Processing and Math
+opencv-python
+Pillow
+numpy
+pandas
+
+# Utilities
+tqdm
