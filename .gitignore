@@ -177,7 +177,17 @@ data/
 *.pb
 *.weights
 
+# Pretrained weights at root/src level (downloaded, not trained)
+/yolov8s.pt
+/yolo26n.pt
+src/yolov8s.pt
+src/yolo26n.pt
+
+# Periodic epoch checkpoints (too large ~64MB each, keep only best.pt & last.pt)
+**/weights/epoch*.pt
+
 # YOLO training runs / logs / output results
 # runs/  # Cho phép push kết quả training
+runs/detect/val/
 wandb/
 mlflow/
