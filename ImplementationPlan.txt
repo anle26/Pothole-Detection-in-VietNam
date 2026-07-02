@@ -1,0 +1,68 @@
+# Kế hoạch Triển khai: Đánh giá và Tinh chỉnh Mô hình trên Dữ liệu Việt Nam (Ablation Study)
+
+Tài liệu này mô tả chi tiết các bước chuẩn bị dữ liệu, cấu trúc thư mục lưu trữ và kịch bản huấn luyện để xây dựng chương **Ablation Study** (nghiên cứu cắt lớp) hoàn chỉnh, chứng minh sự hiệu quả của cơ chế SimAM và phương pháp học chuyển giao (LP-FT).
+
+## Đánh giá Kế hoạch (Vui lòng phản hồi)
+
+> [!IMPORTANT]
+> - Cấu trúc thư mục kết quả (`runs/vietnam_evaluation/`) và cách tổ chức các bài thí nghiệm dưới đây đã hợp lý với mong muốn trình bày trong báo cáo của bạn chưa?
+> - Tỷ lệ mẫu cho bài toán Few-shot tôi đề xuất là 10%, bạn có muốn thay đổi thành số lượng ảnh cụ thể (vd: 50 ảnh, 100 ảnh) không?
+
+---
+
+## 1. Chuẩn bị Dữ liệu (Dataset Preparation)
+
+Chúng ta sẽ tạo một script `src/prepare_vietnam_dataset.py` để xử lý bộ dữ liệu `data/VietNamPotholeDataset_External`. Quá trình sẽ gồm 2 phần:
+
+### A. Gộp tập Train & Val hiện tại và Chia K-Fold (Cho Full LP-FT)
+- **Hành động**: Đọc toàn bộ ảnh từ thư mục `train` và `valid` hiện tại của tập Việt Nam.
+- **Xử lý**: Trộn ngẫu nhiên (Shuffle) và chia làm 5 phần bằng nhau (K=5).
+- **Đầu ra**: 
+  - Lưu vào `data/processed/vietnam_kfold/`
+  - Tạo 5 file cấu hình tương ứng: `dataset_fold_1.yaml`, ..., `dataset_fold_5.yaml`.
+
+### B. Trích xuất mẫu nhỏ (Cho Few-Shot Learning)
+- **Hành động**: Dựa trên danh sách ảnh của Fold 1 (coi như tập Train tiêu chuẩn), ta rút ngẫu nhiên ra 50 ảnh.
+- **Đầu ra**: 
+  - Tạo cấu hình `dataset_fewshot_50_images.yaml`.
+
+---
+
+## 2. Các Kịch Bản Thí Nghiệm (Ablation Study Experiments)
+
+Chúng ta sẽ thực hiện 3 kịch bản thí nghiệm (Zero-shot, Few-shot, Full LP-FT) cho **CẢ HAI** mô hình:
+1. **YOLOv8 Base**: Sử dụng trọng số pre-train gốc (`runs/detect/base_model/weights/best.pt`).
+2. **YOLOv8 + SimAM**: Sử dụng trọng số pre-train đã tích hợp attention (`runs/detect/simam_model/weights/best.pt`).
+
+Chúng ta sẽ có một script tổng `src/run_ablation_experiments.py` để thực thi tuần tự các kịch bản này. Toàn bộ kết quả huấn luyện (Log, Weights, Biểu đồ) sẽ được lưu tập trung vào thư mục `runs/vietnam_evaluation/` để bạn dễ lấy ảnh bỏ vào báo cáo.
+
+### Kịch Bản 1: Zero-Shot Transfer
+Mục tiêu: Đánh giá trực tiếp hiệu năng của mô hình pre-train trên đặc điểm đường xá Việt Nam mà không cần huấn luyện lại.
+- **Hành động**: Chạy hàm `model.val()` trên tập Test của Việt Nam.
+- **Kết quả lưu tại**: 
+  - `runs/vietnam_evaluation/zero_shot/yolo_base/`
+  - `runs/vietnam_evaluation/zero_shot/yolo_simam/`
+
+### Kịch Bản 2: Few-Shot LP-FT (Ví dụ 50 ảnh)
+Mục tiêu: Đánh giá khả năng học nhanh của mô hình khi chỉ cung cấp rất ít dữ liệu bản địa.
+- **Hành động**: Huấn luyện LP-FT (Đóng băng backbone -> Mở khóa backbone) trên cấu hình `dataset_fewshot_50_images.yaml`.
+- **Kết quả lưu tại**: 
+  - `runs/vietnam_evaluation/few_shot/yolo_base/`
+  - `runs/vietnam_evaluation/few_shot/yolo_simam/`
+
+### Kịch Bản 3: Full K-Fold LP-FT (100% dữ liệu)
+Mục tiêu: Đánh giá hiệu suất tối đa (Upper bound) và độ ổn định của mô hình trên toàn bộ tập dữ liệu.
+- **Hành động**: Vòng lặp `k` từ 1 đến 5. Với mỗi Fold, thực hiện:
+  - **Stage 1 (Linear Probing - LP)**: Đóng băng lớp 0-9, learning rate = 0.01 (20 epochs).
+  - **Stage 2 (Fine-Tuning - FT)**: Load trọng số tốt nhất của Stage 1, mở khóa toàn bộ mô hình, learning rate = 0.001 (50 epochs).
+- **Kết quả lưu tại**: 
+  - `runs/vietnam_evaluation/full_lpft/yolo_base/fold_1_lp/` và `fold_1_ft/`
+  - `runs/vietnam_evaluation/full_lpft/yolo_simam/fold_1_lp/` và `fold_1_ft/`
+
+---
+
+## 3. Kế hoạch Kiểm tra (Verification)
+
+- Kiểm tra tính rời rạc của các Fold (không bị rò rỉ dữ liệu giữa tập train và tập val trong từng Fold).
+- Theo dõi thư mục `runs/vietnam_evaluation/` sau khi chạy xong script để đảm bảo đồ thị (loss, mAP) được lưu đầy đủ cho việc viết báo cáo.
+- So sánh bảng metrics cuối cùng của 3 kịch bản. Kỳ vọng: mAP sẽ tăng dần theo thứ tự: `Zero-shot < Few-shot < Full LP-FT` và ở mỗi phương pháp thì `YOLO_Base < YOLO_SimAM`.

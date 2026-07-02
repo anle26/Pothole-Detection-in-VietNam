@@ -2,20 +2,30 @@
 # -*- coding: utf-8 -*-
 
 """
-🚀 YOLOv8s Training Pipeline - Domain Generalization (Pre-training)
-This script is optimized for RTX 3060 (12GB VRAM) and 64GB RAM on Windows.
-It handles automatic path updates, model training, validation, and ONNX export.
+🚀 YOLOv8s BASELINE Training Pipeline
+This script trains a standard YOLOv8s model WITHOUT any attention module.
+It serves as the BASELINE for fair comparison against YOLOv8s + SimAM.
+
+ALL hyperparameters (augmentation, LR, batch, epochs, etc.) are IDENTICAL
+to train_yolov8_simam.py to ensure a fair comparison.
+
+Hardware profile: RTX 3060 (12GB VRAM) & Ryzen 7 5000 series (Windows)
 """
 
 import os
 import sys
-import torch
+import time
 import yaml
+import torch
 from ultralytics import YOLO
 
-# Disable Weights & Biases (WandB) to avoid interactive login prompts
+# Disable WandB to prevent login blocks
 os.environ["WANDB_DISABLED"] = "true"
 
+
+# ==============================================================================
+# 1. UTILITY FUNCTIONS
+# ==============================================================================
 
 def print_system_info():
     """Prints hardware and environment information."""
@@ -42,11 +52,7 @@ def get_and_update_dataset_yaml(project_root):
         os.path.join(project_root, "data", "processed", "trial_dataset", "dataset.yaml"),
     ]
     
-    dataset_yaml = None
-    for path in yaml_candidates:
-        if os.path.exists(path):
-            dataset_yaml = path
-            break
+    dataset_yaml = next((p for p in yaml_candidates if os.path.exists(p)), None)
             
     if not dataset_yaml:
         raise FileNotFoundError("❌ Could not find dataset.yaml. Please check your data directories!")
@@ -67,126 +73,217 @@ def get_and_update_dataset_yaml(project_root):
     return dataset_yaml
 
 
+# ==============================================================================
+# 2. MAIN TRAINING LOOP
+# ==============================================================================
+
 def main():
     # 0. Print System Details
     print_system_info()
     
+    print("=" * 60)
+    print("🚀 INITIALIZING YOLOv8s BASELINE TRAINING PIPELINE")
+    print("   (No attention module — for fair comparison with SimAM)")
+    print("=" * 60)
+    
     # 1. Resolve Project Root and Data Configuration
-    # Assumes script is run from project root, fallback to parent of notebooks folder
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = current_dir
-    if os.path.basename(project_root) == "notebooks":
-        project_root = os.path.dirname(project_root)
-        
+    project_root = os.path.dirname(current_dir) if os.path.basename(current_dir) in ("src", "notebooks") else current_dir
     dataset_yaml = get_and_update_dataset_yaml(project_root)
     
-    # 2. Check for Training Checkpoint (Auto-Resume Capability)
-    # Using relative paths since settings.json handles runs_dir relative or absolute
-    checkpoint_candidates = [
-        os.path.join(project_root, "runs", "detect", "runs", "detect", "base_model", "weights", "last.pt"),
-        os.path.join(project_root, "runs", "detect", "base_model", "weights", "last.pt"),
-        os.path.join(project_root, "runs", "detect", "train", "weights", "last.pt"),
-    ]
+    # ------------------------------------------------------------------
+    # OUTPUT PATHS — separate from SimAM results
+    # Baseline saves to: runs/detect/yolov8s_baseline/
+    # SimAM   saves to: runs/detect/yolov8s_simam/
+    # ------------------------------------------------------------------
+    RUN_PROJECT = os.path.join(project_root, "runs", "detect")
+    RUN_NAME = "yolov8s_baseline"
+    RUN_DIR = os.path.join(RUN_PROJECT, RUN_NAME)
     
-    last_checkpoint = None
-    for cp_path in checkpoint_candidates:
-        if os.path.exists(cp_path):
-            last_checkpoint = cp_path
-            break
-            
-    # 3. Model Initialization & Training
-    if last_checkpoint:
-        print(f"\n🔄 [RESUME] Found last checkpoint at: {last_checkpoint}")
-        print("⏳ Resuming training from last saved epoch...")
-        model = YOLO(last_checkpoint)
-        results = model.train(resume=True, workers=0, batch=8, amp=False)
+    print(f"\n📁 Output directory : {RUN_DIR}")
+    print(f"   (SimAM lives in : {os.path.join(RUN_PROJECT, 'yolov8s_simam')} — NOT overwritten)")
+    
+    # 2. Load Model
+    print("\n📦 Loading Pre-trained YOLOv8s (standard, no attention)...")
+    model = YOLO("yolov8s.pt")
+    
+    # ------------------------------------------------------------------
+    # CHECK FOR EXISTING CHECKPOINT → AUTO-RESUME
+    # ------------------------------------------------------------------
+    resume_weights = os.path.join(RUN_DIR, "weights", "last.pt")
+    if os.path.exists(resume_weights):
+        print(f"\n🔄 Found existing checkpoint: {resume_weights}")
+        print("   Resuming training from last saved state...")
+        model = YOLO(resume_weights)
+        results = model.train(resume=True)
     else:
-        print("\n🆕 [NEW RUN] No checkpoint found. Loading pre-trained yolov8s.pt...")
-        model = YOLO("yolov8s.pt")
-        
-        print("🔥 Launching hardware-optimized training...")
+        print("🔥 Starting Training (Hardware configs synced for RTX 3060 & Windows)...")
         results = model.train(
-            # --- Paths and Output ---
             data=dataset_yaml,
-            project="runs/detect",
-            name="base_model",
+            project=RUN_PROJECT,
+            name=RUN_NAME,
             exist_ok=True,
             
-            # --- Hardware Optimization (RTX 3060 12GB + 64GB RAM) ---
-            cache=False,            # Disable RAM caching when using workers > 0 to avoid Windows multiprocessing pickle MemoryError (since SSD is fast enough)
-            workers=0,              # FIXED: Must be 0 on Windows to avoid "CUDA error: unspecified launch failure"
-            batch=16,               # TĂNG LẠI LÊN 16: GPU của bạn rất mát (44 độ), Batch 16 sẽ giúp model học mượt hơn (gradient ổn định hơn).
-            imgsz=640,              # Standard 640x640 input resolution
-            device=0,               # Run on GPU index 0
-            amp=False,              # FIXED: Disabled AMP (Mixed Precision) to prevent fatal CUDA crash on Windows during make_anchors
-            
-            # --- Convergence Parameters ---
-            epochs=100,             # Train for 100 epochs
-            patience=20,            # Early stopping if mAP@50-95 doesn't improve for 20 epochs
-            optimizer="auto",       # YOLO auto-selects optimizer (typically AdamW)
-            
-            # --- Augmentation (Domain Generalization) ---
-            mosaic=0.5,             # GIẢM XUỐNG 0.5: Ổ gà là vật thể nhỏ, cắt ghép quá nhiều (1.0) sẽ làm mất bối cảnh mặt đường.
-            mixup=0.0,              # TẮT (0.0): Chồng ảnh (Mixup) làm ổ gà bị mờ, model rất khó nhận diện.
-            close_mosaic=15,        # Turn off Mosaic in the last 15 epochs to fine-tune bounding boxes
+            # --- Hardware Optimizations ---
+            # ⚠️ IDENTICAL to SimAM version for fair comparison
+            cache='ram',
+            workers=0,          # Must be 0 on Windows to avoid CUDA launch failure with multiprocessing
+            batch=16,           # Safe for 12GB VRAM
+            imgsz=640,
+            device=0,
+            amp=True,           # Mixed precision → faster + less VRAM; disable if NaN loss
+
+            # --- Safety: Checkpoint & Early Stopping ---
+            save=True,          # Save best.pt & last.pt
+            save_period=10,     # Save checkpoint every 10 epochs
+            epochs=100,
+            patience=20,        # Early stopping: stop if no improvement for 20 epochs
+
+            # --- Training Hyperparams ---
+            # ⚠️ IDENTICAL to SimAM version for fair comparison
+            optimizer="auto",
+            lr0=0.01,           # Initial learning rate
+            lrf=0.01,           # Final LR = lr0 × lrf (cosine schedule)
+            weight_decay=0.0005,
+            warmup_epochs=3.0,
+            warmup_momentum=0.8,
+
+            # --- Augmentation for Domain Generalization ---
+            # ⚠️ IDENTICAL to SimAM version for fair comparison
+            hsv_h=0.015,        # Hue shift — lighting variation
+            hsv_s=0.7,          # Saturation — wet vs dry road
+            hsv_v=0.4,          # Brightness — day vs night
+            degrees=5.0,        # Slight rotation — tilted camera
+            translate=0.1,      # Position shift
+            scale=0.5,          # Multi-scale potholes
+            fliplr=0.5,         # Horizontal flip
+            flipud=0.0,         # No vertical flip — potholes are always below
+            mosaic=1.0,         # Full mosaic for dense scenes
+            mixup=0.1,          # Light mixup for regularization
+            copy_paste=0.1,     # Paste potholes onto other road surfaces
+            erasing=0.2,        # Random erasing — occlusion robustness
+            close_mosaic=15,    # Disable mosaic for last 15 epochs (fine-tune)
         )
+
     print("\n🎉 Training run completed successfully!")
-    
-    # 4. Objective Metrics Evaluation (Validation)
+
+    # ==================================================================
+    # 3. POST-TRAINING EVALUATION — F1-SCORE & METRICS
+    # ==================================================================
     print("\n" + "=" * 60)
-    print("📊 STEP 2: RUNNING VALIDATION ON OBJECTIVE METRICS")
+    print("📊 RUNNING POST-TRAINING EVALUATION (F1-Score & Metrics)")
     print("=" * 60)
-    
-    # Locate the best weights
-    best_weight_candidates = [
-        os.path.join(project_root, "runs", "detect", "runs", "detect", "base_model", "weights", "best.pt"),
-        os.path.join(project_root, "runs", "detect", "base_model", "weights", "best.pt"),
-    ]
-    best_model_path = None
-    for path in best_weight_candidates:
-        if os.path.exists(path):
-            best_model_path = path
-            break
-            
-    if not best_model_path:
-        print("❌ Could not find best.pt file. Skipping validation step.")
-        return
-        
-    print(f"🎯 Loading best model from: {best_model_path}")
-    model_eval = YOLO(best_model_path)
-    
-    val_results = model_eval.val(
-        data=dataset_yaml,
-        device=0,
-        batch=32,
-        imgsz=640
-    )
-    
-    metrics = val_results.results_dict
-    map50 = metrics.get('metrics/mAP50(B)', 0.0)
-    map50_95 = metrics.get('metrics/mAP50-95(B)', 0.0)
-    
-    print("\n" + "=" * 60)
-    print("🏆 VALIDATION RESULTS (VAL METRICS COCO):")
-    print(f"📈 mAP@50 (IoU=0.50)      : {map50:.4f} ({map50 * 100:.2f}%)")
-    print(f"📈 mAP@50-95 (IoU=0.50:0.95): {map50_95:.4f} ({map50_95 * 100:.2f}%)")
-    print("=" * 60)
-    
-    # 5. Export to ONNX format
-    print("\n" + "=" * 60)
-    print("📦 STEP 3: EXPORTING MODEL TO ONNX FORMAT")
-    print("=" * 60)
-    
-    print("📦 Converting model to ONNX...")
-    onnx_path = model_eval.export(
-        format="onnx",
-        dynamic=True,       # Dynamic batch & image sizes
-        simplify=True       # Simplify ONNX execution graph
-    )
-    print("\n" + "=" * 60)
-    print("🎉 MODEL EXPORTED SUCCESSFULLY!")
-    print(f"💾 ONNX File Path: {onnx_path}")
-    print("=" * 60)
+
+    # Load the best checkpoint from the training run
+    best_weights = os.path.join(RUN_DIR, "weights", "best.pt")
+    if os.path.exists(best_weights):
+        eval_model = YOLO(best_weights)
+        metrics = eval_model.val(
+            data=dataset_yaml,
+            imgsz=640,
+            batch=16,
+            device=0,
+            plots=True,        # Generates P-R curve, F1-curve, confusion matrix
+            save_json=False,
+        )
+
+        # Extract key metrics
+        precision = metrics.box.mp       # Mean Precision
+        recall = metrics.box.mr          # Mean Recall
+        map50 = metrics.box.map50        # mAP@0.5
+        map50_95 = metrics.box.map       # mAP@0.5:0.95
+
+        # Compute F1-Score from Precision & Recall
+        if (precision + recall) > 0:
+            f1_score = 2 * (precision * recall) / (precision + recall)
+        else:
+            f1_score = 0.0
+
+        # ==============================================================
+        # 4. MODEL EFFICIENCY METRICS — Parameters, GFLOPs, Latency
+        # ==============================================================
+        print("\n" + "=" * 60)
+        print("⚙️  PROFILING MODEL EFFICIENCY")
+        print("=" * 60)
+
+        # --- Parameter Count ---
+        total_params = sum(p.numel() for p in eval_model.model.parameters())
+        trainable_params = sum(p.numel() for p in eval_model.model.parameters() if p.requires_grad)
+
+        # --- GFLOPs (via ultralytics built-in) ---
+        try:
+            model_info = eval_model.info(detailed=False, verbose=False)
+            # model.info() returns (layers, params, gradients, gflops)
+            if isinstance(model_info, (list, tuple)) and len(model_info) >= 4:
+                gflops = model_info[3]
+            else:
+                gflops = None
+        except Exception:
+            gflops = None
+
+        # Fallback: compute GFLOPs manually via thop if available
+        if gflops is None:
+            try:
+                from thop import profile as thop_profile
+                dummy_input = torch.randn(1, 3, 640, 640).to(next(eval_model.model.parameters()).device)
+                flops, _ = thop_profile(eval_model.model, inputs=(dummy_input,), verbose=False)
+                gflops = flops / 1e9
+            except ImportError:
+                gflops = -1  # thop not installed
+
+        # --- Inference Latency Benchmark ---
+        print("  ⏱️  Benchmarking inference speed (GPU)...")
+        device = next(eval_model.model.parameters()).device
+        eval_model.model.eval()
+        dummy = torch.randn(1, 3, 640, 640, device=device)
+
+        # Warmup (discard first runs for GPU JIT compilation)
+        with torch.no_grad():
+            for _ in range(100):
+                _ = eval_model.model(dummy)
+
+        # Timed runs
+        num_runs = 300
+        if device.type == "cuda":
+            torch.cuda.synchronize()
+        t_start = time.perf_counter()
+        with torch.no_grad():
+            for _ in range(num_runs):
+                _ = eval_model.model(dummy)
+        if device.type == "cuda":
+            torch.cuda.synchronize()
+        t_end = time.perf_counter()
+
+        avg_ms = (t_end - t_start) / num_runs * 1000  # ms per image
+        fps = 1000.0 / avg_ms if avg_ms > 0 else 0
+
+        # ==============================================================
+        # PRINT ALL RESULTS
+        # ==============================================================
+        print("\n" + "=" * 60)
+        print("📈 FINAL EVALUATION RESULTS — YOLOv8s BASELINE")
+        print("=" * 60)
+
+        print("\n  --- Accuracy Metrics ---")
+        print(f"  Precision       : {precision:.4f}")
+        print(f"  Recall          : {recall:.4f}")
+        print(f"  ⭐ F1-Score      : {f1_score:.4f}")
+        print(f"  mAP@0.5         : {map50:.4f}")
+        print(f"  mAP@0.5:0.95    : {map50_95:.4f}")
+
+        print("\n  --- Efficiency Metrics ---")
+        print(f"  Parameters      : {total_params:,} ({total_params / 1e6:.2f}M)")
+        print(f"  Trainable       : {trainable_params:,} ({trainable_params / 1e6:.2f}M)")
+        if gflops and gflops > 0:
+            print(f"  GFLOPs          : {gflops:.2f}")
+        else:
+            print(f"  GFLOPs          : N/A (install 'thop' for manual calc)")
+        print(f"  Inference Time  : {avg_ms:.2f} ms/image")
+        print(f"  FPS             : {fps:.1f}")
+
+        print("=" * 60)
+    else:
+        print(f"⚠️ Best weights not found at {best_weights}. Skipping evaluation.")
 
 
 if __name__ == "__main__":
