@@ -166,8 +166,8 @@ ehthumbs.db
 # If you want to keep data structure but ignore images/labels, you can be specific.
 # Here we ignore all files in data/ except possibly template config files if any.
 # For now, let's ignore large data downloads.
-data/
-models/
+/data/
+/models/
 
 # Model Weights (YOLO model weights are usually very large, e.g., best.pt, last.pt, yolov8n.pt)
 *.pt  # NGĂN CHẶN push model weights (tránh đầy Git 2.3GB)
