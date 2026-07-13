@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 # Import SimAM modules and helper
 import ultralytics.nn.modules.block as block
 import ultralytics.nn.tasks as tasks
-from src.models.simam_module import apply_simam_patch, OriginalC2f, C2f_SimAM
+from src.models.simam_module import apply_simam_patch, OriginalC2f, C2f_SimAM, SimAM
 
 base_dir = str(PROJECT_ROOT)
 out_dir = os.path.join(base_dir, 'runs', 'vietnam_evaluation')

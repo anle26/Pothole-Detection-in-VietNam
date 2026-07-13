@@ -20,7 +20,7 @@ sys.modules['__main__'].C2f_SimAM = C2f_SimAM
 sys.modules['__main__'].SimAM = SimAM
 
 def main():
-    parser = argparse.ArgumentParser(description="Run YOLO pothole detection on a video")
+    parser = argparse.ArgumentParser(description="Run YOLO pothole detection on a video and save output")
     parser.add_argument(
         "--model", 
         type=str, 
@@ -52,7 +52,7 @@ def main():
     print(f"Loading model from {model_path}...")
     model = YOLO(model_path)
 
-    print(f"Running inference on {source_path}...")
+    print(f"🎬 Running inference and saving output on {source_path}...")
     # Run inference on the video
     # Ensure absolute path to prevent double nesting like runs/detect/runs/detect
     project_path = PROJECT_ROOT / "runs" / "detect"
@@ -67,7 +67,7 @@ def main():
         exist_ok=True
     )
     
-    print(f"\nInference completed successfully!")
+    print(f"\n✅ Inference completed successfully!")
     if args.save:
         print(f"Output video with bounding boxes saved in: runs/detect/video_inference")
 
