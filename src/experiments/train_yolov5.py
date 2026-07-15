@@ -114,7 +114,7 @@ def main():
             batch=16,           # Safe for 12GB VRAM
             imgsz=640,
             device=0,
-            amp=True,           # Mixed precision → faster + less VRAM
+            amp=False,           # Disabled AMP to avoid CUDA unspecified launch failure on Windows
 
             # --- Safety: Checkpoint & Early Stopping ---
             save=True,          # Save best.pt & last.pt
