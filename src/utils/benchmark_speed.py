@@ -161,7 +161,7 @@ def main():
         {
             "name": "YOLOv8s Base",
             "weight": os.path.join(base_dir, "runs", "detect", "yolov8s_baseline", "weights", "best.pt"),
-            "csv_path": os.path.join(base_dir, "runs", "vietnam_evaluation", "full_lpft", "yolov8s_baseline", "fold_1", "ft", "results.csv"),
+            "csv_path": os.path.join(base_dir, "runs", "vietnam_evaluation", "full_lpft", "yolo_base", "fold_1", "ft", "results.csv"),
             "patch": None
         },
         {
