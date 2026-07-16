@@ -1,0 +1,52 @@
+{
+  "per_split": {
+    "train": {
+      "HoangHuuNamStreet": 112,
+      "DinhCongTrangStreet": 127,
+      "Rural_Road": 20,
+      "Inter-hamlet_Roads_Alleys_(Rural_Features)": 11,
+      "Provincial_Road_867": 3,
+      "National_Highway_1": 62,
+      "UNKNOWN": 15
+    },
+    "valid": {
+      "HoangHuuNamStreet": 17,
+      "National_Highway_1": 8,
+      "DinhCongTrangStreet": 21,
+      "UNKNOWN": 1,
+      "Rural_Road": 1,
+      "Inter-hamlet_Roads_Alleys_(Rural_Features)": 2
+    },
+    "test": {
+      "HoangHuuNamStreet": 31,
+      "National_Highway_1": 23,
+      "Rural_Road": 7,
+      "UNKNOWN": 4,
+      "DinhCongTrangStreet": 32,
+      "Inter-hamlet_Roads_Alleys_(Rural_Features)": 2,
+      "Provincial_Road_867": 1
+    }
+  },
+  "overall": {
+    "DinhCongTrangStreet": 180,
+    "HoangHuuNamStreet": 160,
+    "Inter-hamlet_Roads_Alleys_(Rural_Features)": 15,
+    "National_Highway_1": 93,
+    "Provincial_Road_867": 4,
+    "Rural_Road": 28,
+    "UNKNOWN": 20
+  },
+  "total": 500,
+  "street_folders": [
+    "DinhCongTrangStreet",
+    "HoangHuuNamStreet",
+    "Inter-hamlet_Roads_Alleys_(Rural_Features)",
+    "National_Highway_1",
+    "Pham_Van_Bach_Street_(Urban_Intersections) - X",
+    "Provincial_Road_867",
+    "Provincial_Road_867(1)",
+    "RRural_Road -X",
+    "Rural_Road",
+    "Rural_Road_(CuuLongRiver) - X"
+  ]
+}
