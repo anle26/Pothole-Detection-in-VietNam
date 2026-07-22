@@ -63,13 +63,14 @@ class C2f_CBAM(OriginalC2f):
     """
     def __init__(self, c1, c2, n=1, shortcut=False, g=1, e=0.5):
         super().__init__(c1, c2, n, shortcut, g, e)
-        # CBAM takes the output channels of C2f
-        self.cbam = CBAM(c2)
+        # CBAM takes the output channels of C2f. 
+        # Tối ưu hóa cho ổ gà: ratio=8 (giữ chi tiết), kernel_size=3 (tập trung đặc trưng vi mô)
+        self.cbam = CBAM(c2, ratio=8, kernel_size=3)
         
     def forward(self, x):
         # Run standard C2f extraction
         out = super().forward(x)
-        # Apply CBAM attention
+        # Trả lại hàm forward gốc của CBAM (Attention Gate)
         return self.cbam(out)
 
 def apply_cbam_patch():

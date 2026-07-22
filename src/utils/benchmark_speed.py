@@ -82,23 +82,29 @@ def benchmark_model(model_name, weight_path, patch_func=None):
         
     # --- 3. FPS (Latency) ---
     model.model.eval()
-    dummy = torch.randn(1, 3, 640, 640, device=device)
+    model.model.half()  # Chuyển mô hình sang FP16 (Tăng tốc tối đa trên RTX 3060)
+    torch.backends.cudnn.benchmark = True  # Tối ưu hóa CuDNN backend
+    
+    dummy = torch.randn(1, 3, 640, 640, device=device).half()
     
     # Warmup
-    print("   -> Warming up GPU...")
+    print("   -> Warming up GPU (FP16)...")
     with torch.no_grad():
         for _ in range(100):
             _ = model.model(dummy)
             
     # Timed runs
-    print("   -> Running 500 inferences...")
+    print("   -> Running 500 inferences (Raw Network)...")
     num_runs = 500
+    
     if device.type == "cuda":
         torch.cuda.synchronize()
     t_start = time.perf_counter()
+    
     with torch.no_grad():
         for _ in range(num_runs):
             _ = model.model(dummy)
+            
     if device.type == "cuda":
         torch.cuda.synchronize()
     t_end = time.perf_counter()
@@ -121,24 +127,16 @@ def benchmark_model(model_name, weight_path, patch_func=None):
         "status": "OK"
     }
 
-def get_mAP_from_csv(csv_path):
-    """Parses ultralytics results.csv to get the final mAP50 and mAP50-95."""
-    if not os.path.exists(csv_path):
+def get_mAP_from_json(json_path):
+    """Parses metrics.json to get the final mAP50-95."""
+    if not os.path.exists(json_path):
         return "N/A", "N/A"
     try:
-        import pandas as pd
-        df = pd.read_csv(csv_path)
-        # ultralytics results.csv column names often have leading spaces
-        df.columns = df.columns.str.strip()
-        last_row = df.iloc[-1]
-        
-        # Depending on ultralytics version, column might be 'metrics/mAP50(B)' or similar
-        map50_col = next((c for c in df.columns if 'mAP50(B)' in c or c == 'metrics/mAP_0.5'), None)
-        map50_95_col = next((c for c in df.columns if 'mAP50-95(B)' in c or c == 'metrics/mAP_0.5:0.95'), None)
-        
-        map50 = f"{last_row[map50_col]:.4f}" if map50_col else "N/A"
-        map50_95 = f"{last_row[map50_95_col]:.4f}" if map50_95_col else "N/A"
-        return map50, map50_95
+        import json
+        with open(json_path, 'r') as f:
+            data = json.load(f)
+        map50_95 = f"{data.get('map', 0):.4f}"
+        return "N/A", map50_95 # map50 is not explicitly saved in our metrics.json
     except Exception as e:
         return "Error", "Error"
 
@@ -150,30 +148,30 @@ def main():
     import ultralytics
     base_dir = str(PROJECT_ROOT)
     
-    # Models to test and their corresponding evaluation CSV
+    # Models to test and their corresponding evaluation JSON
     models_to_test = [
         {
             "name": "YOLOv5s",
             "weight": os.path.join(base_dir, "runs", "detect", "yolov5s_baseline", "weights", "best.pt"),
-            "csv_path": os.path.join(base_dir, "runs", "vietnam_evaluation", "full_lpft", "yolov5s", "fold_1", "ft", "results.csv"),
+            "json_path": os.path.join(base_dir, "runs", "vietnam_evaluation", "full_lpft", "yolov5s", "fold_1", "metrics.json"),
             "patch": None
         },
         {
             "name": "YOLOv8s Base",
             "weight": os.path.join(base_dir, "runs", "detect", "yolov8s_baseline", "weights", "best.pt"),
-            "csv_path": os.path.join(base_dir, "runs", "vietnam_evaluation", "full_lpft", "yolo_base", "fold_1", "ft", "results.csv"),
+            "json_path": os.path.join(base_dir, "runs", "vietnam_evaluation", "full_lpft", "yolo_base", "fold_1", "metrics.json"),
             "patch": None
         },
         {
             "name": "YOLOv8s+CBAM",
             "weight": os.path.join(base_dir, "runs", "detect", "yolov8s_cbam", "weights", "best.pt"),
-            "csv_path": os.path.join(base_dir, "runs", "vietnam_evaluation", "full_lpft", "yolo_cbam", "fold_1", "ft", "results.csv"),
+            "json_path": os.path.join(base_dir, "runs", "vietnam_evaluation", "full_lpft", "yolo_cbam", "fold_1", "metrics.json"),
             "patch": apply_cbam_patch
         },
         {
             "name": "YOLOv8s+SimAM",
             "weight": os.path.join(base_dir, "runs", "detect", "yolov8s_simam", "weights", "best.pt"),
-            "csv_path": os.path.join(base_dir, "runs", "vietnam_evaluation", "full_lpft", "yolo_simam", "fold_1", "ft", "results.csv"),
+            "json_path": os.path.join(base_dir, "runs", "vietnam_evaluation", "full_lpft", "yolo_simam", "fold_1", "metrics.json"),
             "patch": apply_simam_patch
         }
     ]
@@ -181,7 +179,7 @@ def main():
     results = []
     for m in models_to_test:
         res = benchmark_model(m["name"], m["weight"], m["patch"])
-        map50, map50_95 = get_mAP_from_csv(m["csv_path"])
+        map50, map50_95 = get_mAP_from_json(m["json_path"])
         res["map50"] = map50
         res["map50_95"] = map50_95
         results.append(res)
@@ -196,7 +194,7 @@ def main():
     print("="*100)
     
     device_name = torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU"
-    print(f"* Note: FPS and Latency were measured on {device_name} with batch-size 1, FP32 precision.")
+    print(f"* Note: FPS and Latency were measured on {device_name} with batch-size 1, FP16 precision (Optimized).")
     print("* Note: mAP metrics are extracted from Vietnam dataset Fine-Tuning (Fold 1).")
 
 if __name__ == "__main__":
