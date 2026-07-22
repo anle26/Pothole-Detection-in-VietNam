@@ -60,60 +60,75 @@ def worker_zero_shot(model_path, data_yaml, run_dir):
         }, f)
 
 def worker_lp_ft(model_path, data_yaml, run_dir, epochs_lp, epochs_ft):
-    model = YOLO(model_path)
-    
     # STAGE 1: Linear Probing
     lp_dir = os.path.join(run_dir, "lp")
-    model.train(
-        data=data_yaml,
-        project=os.path.dirname(lp_dir),
-        name=os.path.basename(lp_dir),
-        exist_ok=True,
-        epochs=epochs_lp,
-        freeze=10,
-        optimizer="SGD",
-        lr0=0.005,
-        imgsz=640,
-        workers=0,
-        batch=8,
-        device=DEVICE,
-        amp=False,
-        save=True,
-        patience=10
-    )
-    
     lp_best = os.path.join(lp_dir, "weights", "best.pt")
+    lp_last = os.path.join(lp_dir, "weights", "last.pt")
+    
+    if os.path.exists(lp_best):
+        print(f"✅ Found completed LP stage: {lp_best}")
+    else:
+        init_weights = lp_last if os.path.exists(lp_last) else model_path
+        print(f"🔥 Running LP stage using weights: {init_weights}")
+        model = YOLO(init_weights)
+        model.train(
+            data=data_yaml,
+            project=os.path.dirname(lp_dir),
+            name=os.path.basename(lp_dir),
+            exist_ok=True,
+            epochs=epochs_lp,
+            freeze=10,
+            optimizer="SGD",
+            lr0=0.005,
+            imgsz=640,
+            workers=0,
+            batch=8,
+            device=DEVICE,
+            amp=False,
+            save=True,
+            patience=10
+        )
+    
     if not os.path.exists(lp_best):
         print("⚠️ LP failed. Exiting worker.")
         return
         
     # Free memory
-    del model
+    if 'model' in locals():
+        del model
     import gc
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     
     # STAGE 2: Fine-Tuning
-    model_ft = YOLO(lp_best)
     ft_dir = os.path.join(run_dir, "ft")
-    model_ft.train(
-        data=data_yaml,
-        project=os.path.dirname(ft_dir),
-        name=os.path.basename(ft_dir),
-        exist_ok=True,
-        epochs=epochs_ft,
-        freeze=0,
-        optimizer="SGD",
-        lr0=0.001,
-        imgsz=640,
-        workers=0,
-        batch=8,
-        device=DEVICE,
-        amp=False,
-        save=True,
-        patience=15
-    )
+    ft_best = os.path.join(ft_dir, "weights", "best.pt")
+    ft_last = os.path.join(ft_dir, "weights", "last.pt")
+    
+    if os.path.exists(ft_best):
+        print(f"✅ Found completed FT stage: {ft_best}")
+    else:
+        init_ft_weights = ft_last if os.path.exists(ft_last) else lp_best
+        print(f"🔥 Running FT stage using weights: {init_ft_weights}")
+        model_ft = YOLO(init_ft_weights)
+        model_ft.train(
+            data=data_yaml,
+            project=os.path.dirname(ft_dir),
+            name=os.path.basename(ft_dir),
+            exist_ok=True,
+            epochs=epochs_ft,
+            freeze=0,
+            optimizer="SGD",
+            lr0=0.001,
+            imgsz=640,
+            workers=0,
+            batch=8,
+            device=DEVICE,
+            amp=False,
+            save=True,
+            patience=15
+        )
     
     # Evaluate
     ft_best = os.path.join(ft_dir, "weights", "best.pt")
@@ -151,7 +166,7 @@ def spawn_worker(worker_task, model_path, data_yaml, run_dir, epochs_lp=0, epoch
 
     print(f"\n🚀 Spawning isolated process for: {run_dir}")
     
-    max_retries = 3
+    max_retries = 5
     for attempt in range(1, max_retries + 1):
         try:
             subprocess.run(cmd, check=True)

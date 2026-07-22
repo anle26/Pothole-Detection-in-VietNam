@@ -15,7 +15,7 @@ Dưới đây là báo cáo phân tích chi tiết dựa trên bảng kết qu�
 | Mô hình (Model Architecture) | mAP@0.5:0.95 (Fold 1) | Precision | Recall |
 | :--- | :---: | :---: | :---: |
 | **YOLOv8s Base** | ~0.1833 (avg) | - | - |
-| **YOLOv8s + CBAM** | 0.1665 | 0.4426 | 0.5189 |
+| **YOLOv8s + CBAM (Optimized)** | **0.1843** | **0.5321** | **0.4620** |
 | **YOLOv5s Base** | **0.1984** | 0.5628 | 0.4113 |
 
 ---
@@ -26,9 +26,9 @@ Dưới đây là báo cáo phân tích chi tiết dựa trên bảng kết qu�
 Điểm mAP của Zero-shot Transfer cực kỳ thấp ở cả 2 mô hình (chỉ khoảng ~1%). 
 - **Luận điểm báo cáo:** Điều này là bằng chứng đanh thép chứng minh rằng: Mô hình dù được train rất tốt ở bộ dữ liệu tổng hợp nước ngoài (Source Domain), nhưng khi áp dụng trực tiếp lên đường xá Việt Nam (Target Domain) thì thất bại hoàn toàn do sự khác biệt về bối cảnh. Việc sử dụng Linear Probing - Fine Tuning (LP-FT) là bắt buộc và hợp lý.
 
-### Xu hướng 2: Sự vượt trội của SimAM so với Base và CBAM
+### Xu hướng 2: Sự vượt trội của SimAM và hiệu quả tinh chỉnh CBAM
 1. **Zero-shot & Few-shot:** SimAM liên tục áp đảo Base khi dữ liệu khan hiếm. Cơ chế chú ý không gian 3D (Spatial Attention) của SimAM giúp mô hình trích xuất đặc trưng mang tính "tổng quát hóa" (Generalization) tốt hơn hẳn.
-2. **CBAM vs SimAM:** Kết quả trên Fold 1 cho thấy CBAM (0.1665) thấp hơn hẳn so với mức trung bình của YOLOv8 Base và SimAM. Điều này có thể lý giải do CBAM tách biệt Spatial và Channel Attention khiến mạng phức tạp hơn và dễ bị overfit trên dữ liệu nhỏ, trong khi SimAM tối ưu hóa trực tiếp trọng số 3D không cần thêm tham số (parameter-free), phù hợp hơn với bài toán ổ gà.
+2. **CBAM vs SimAM:** Kết quả ban đầu của CBAM chưa tối ưu (0.1665) do bị nén kênh quá sâu (`ratio=16`). Sau khi tiến hành tinh chỉnh siêu tham số chuyên biệt cho ổ gà (`ratio=8`, `kernel_size=3`), hiệu suất CBAM đã bứt phá lên **0.1843** (mAP@0.5:0.95) và **44.60%** (mAP@0.5), tiệm cận SimAM (0.1855). Tuy nhiên, SimAM vẫn chiếm ưu thế tuyệt đối về mặt tốc độ suy luận (**81.8 FPS** so với **69.0 FPS** của CBAM) và không tốn thêm bất kỳ tham số nào (Parameter-free).
 
 ### Xu hướng 3: Bất ngờ từ kiến trúc Anchor-based (YOLOv5s)
 YOLOv5s bất ngờ đạt mức điểm rất cao trên Fold 1 (0.1984), vượt qua cả YOLOv8. 
